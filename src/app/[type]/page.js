@@ -1,15 +1,17 @@
 'use client';
-import { tools } from '@/lib/toolsData';
+import { use } from 'react'; // FIXED: Required for Next.js 15
+import { tools } from '../../lib/toolsData'; // FIXED: Relative path to avoid errors
 import Link from 'next/link';
 import { FileText, Image, Minimize2, Maximize, Crop, RefreshCw, Lock, Unlock, Stamp, RotateCw, Split, Merge } from 'lucide-react';
 
-// Icon Map for dynamic rendering
 const iconMap = {
   FileText, Image, Minimize2, Maximize, Crop, RefreshCw, Lock, Unlock, Stamp, RotateCw, Split, Merge
 };
 
 export default function ToolDashboard({ params }) {
-  const { type } = params; // 'pdf' or 'image'
+  // FIXED: Unwrap params using the 'use' hook
+  const { type } = use(params); 
+
   const currentTools = tools[type] || [];
 
   return (

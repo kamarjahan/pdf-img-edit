@@ -1,70 +1,83 @@
 import { NextResponse } from 'next/server';
 import ILovePDFApi from '@ilovepdf/ilovepdf-nodejs';
 import ILovePDFFile from '@ilovepdf/ilovepdf-nodejs/ILovePDFFile';
-
-// Initialize API with env variables
-const instance = new ILovePDFApi(
-  process.env.ILOVEPDF_PUBLIC_KEY,
-  process.env.ILOVEPDF_SECRET_KEY
-);
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 export async function POST(req) {
+  let tempFilePath = null;
+
   try {
+    const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
+    const secretKey = process.env.ILOVEPDF_SECRET_KEY;
+
+    if (!publicKey || !secretKey) {
+      return NextResponse.json({ error: 'Missing API Keys' }, { status: 500 });
+    }
+
+    const instance = new ILovePDFApi(publicKey, secretKey);
+
     const formData = await req.formData();
-    const file = formData.get('file'); // File object
-    const taskType = formData.get('task'); // e.g., 'compress_pdf'
+    const file = formData.get('file');
+    const taskType = formData.get('task');
+    const password = formData.get('password'); // GET PASSWORD
 
     if (!file || !taskType) {
       return NextResponse.json({ error: 'Missing file or task' }, { status: 400 });
     }
 
-    // Convert Next.js FormData File to Buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Create a new task based on the requested tool
-    // Note: You must map 'merge_pdf' -> 'merge', 'compress_image' -> 'compressimage'
-    // This is a simplified mapper:
-    let apiToolName = taskType.split('_')[0]; // simple heuristic
+    // Map Tool Name
+    let apiToolName = taskType.split('_')[0];
     if (taskType.includes('image') && apiToolName === 'compress') apiToolName = 'compressimage';
     if (taskType.includes('image') && apiToolName === 'resize') apiToolName = 'resizeimage';
+    if (taskType === 'pdf_to_jpg') apiToolName = 'pdfjpg';
+    if (taskType === 'word_to_pdf') apiToolName = 'officepdf';
+    if (taskType === 'protect_pdf') apiToolName = 'protect'; // Explicit mapping for protect
 
-    const task = instance.newTask(apiToolName);
+    // Create Temp File
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const tempDir = os.tmpdir();
+    const safeName = `${Date.now()}_${file.name.replace(/\s/g, '_')}`;
+    tempFilePath = path.join(tempDir, safeName);
+    fs.writeFileSync(tempFilePath, buffer);
 
     // Start Task
+    const task = instance.newTask(apiToolName);
     await task.start();
 
-    // Add File (using buffer)
-    const iLoveFile = new ILovePDFFile(buffer);
+    // Add File
+    const iLoveFile = new ILovePDFFile(tempFilePath);
     await task.addFile(iLoveFile);
 
-    // Process
-    await task.process();
+    // Process with Parameters (Password logic)
+    // If it's a 'protect' task, we MUST pass the password param
+    if (apiToolName === 'protect') {
+        if (!password) {
+            throw new Error("Password is required for Protect PDF");
+        }
+        await task.process({ password: password });
+    } else {
+        await task.process();
+    }
 
-    // Get Download Link (We send the link to frontend instead of downloading stream to save server bandwidth)
-    const downloadData = await task.download(); 
-    // Note: The Node SDK 'download()' typically returns buffer. 
-    // Ideally, with REST, you get a URL. 
-    // For this scaffold, we assume we return a public URL or stream the buffer back.
-    // To keep it simple for this snippet, let's assume we return the buffer directly 
-    // or you can upload this buffer to Firebase Storage and return that URL.
-    
-    // For specific iLoveAPI usage, often you want 'task.download()' which fetches the file.
-    // We will simulate a response here as if we are serving the processed file.
-    
-    // In a real production app, you would upload `downloadData` to Firebase Storage here
-    // and return the Firebase URL to the user.
-    
+    const downloadData = await task.download();
+
     return new NextResponse(downloadData, {
       status: 200,
       headers: {
-        'Content-Type': 'application/pdf', // Dynamic based on output
+        'Content-Type': taskType.includes('pdf') ? 'application/pdf' : 'application/zip',
         'Content-Disposition': `attachment; filename="processed_${file.name}"`,
       },
     });
 
   } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
+    console.error('API ERROR:', error);
+    return NextResponse.json({ error: error.message || 'Processing failed.' }, { status: 500 });
+  } finally {
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
   }
 }
