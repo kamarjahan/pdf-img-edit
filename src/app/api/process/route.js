@@ -1,14 +1,91 @@
 import { NextResponse } from 'next/server';
 import ILovePDFApi from '@ilovepdf/ilovepdf-nodejs';
 import ILovePDFFile from '@ilovepdf/ilovepdf-nodejs/ILovePDFFile';
+import sharp from 'sharp'; 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
 export async function POST(req) {
-  let tempFiles = [];
+  let tempFilePath = null;
 
   try {
+    const formData = await req.formData();
+    const taskType = formData.get('task');
+    const files = formData.getAll('files');
+    
+    // Params
+    const x = parseInt(formData.get('x')) || 0;
+    const y = parseInt(formData.get('y')) || 0;
+    const w = parseInt(formData.get('w'));
+    const h = parseInt(formData.get('h'));
+    const rotateAngle = parseInt(formData.get('rotate_angle')) || 0;
+    const resizeW = parseInt(formData.get('resize_w'));
+    const resizeH = parseInt(formData.get('resize_h'));
+    const compressionLevel = formData.get('compression_level');
+    const password = formData.get('password');
+    const watermarkText = formData.get('watermark_text');
+    const splitRanges = formData.get('split_ranges');
+
+    if (!files || files.length === 0 || !taskType) {
+      return NextResponse.json({ error: 'Missing file or task' }, { status: 400 });
+    }
+
+    const file = files[0];
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // ---------------------------------------------------------
+    // STRATEGY 1: HANDLE IMAGE TOOLS LOCALLY (FAST & FREE)
+    // ---------------------------------------------------------
+    const imageTools = ['crop_image', 'rotate_image', 'resize_image', 'compress_image', 'convert_image'];
+    
+    if (imageTools.includes(taskType)) {
+      console.log(`Processing Image: ${taskType}`);
+      let imagePipeline = sharp(buffer);
+
+      if (taskType === 'crop_image') {
+        // FIX: Ensure we never crash on 0 dimensions. Default to 100x100 if missing.
+        const safeW = w > 0 ? w : 100;
+        const safeH = h > 0 ? h : 100;
+        imagePipeline = imagePipeline.extract({ left: x, top: y, width: safeW, height: safeH });
+      }
+
+      if (taskType === 'rotate_image') {
+        imagePipeline = imagePipeline.rotate(rotateAngle);
+      }
+
+      if (taskType === 'resize_image') {
+        if (resizeW > 0 && resizeH > 0) {
+           imagePipeline = imagePipeline.resize(resizeW, resizeH);
+        }
+      }
+
+      // Compression settings
+      let quality = 80;
+      if (compressionLevel === 'extreme') quality = 30;
+      if (compressionLevel === 'low') quality = 90;
+
+      if (file.type.includes('png') && taskType !== 'convert_image') {
+         imagePipeline = imagePipeline.png({ quality });
+      } else {
+         imagePipeline = imagePipeline.jpeg({ quality });
+      }
+
+      const processedBuffer = await imagePipeline.toBuffer();
+
+      return new NextResponse(processedBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Disposition': `attachment; filename="processed_${file.name}"`,
+        },
+      });
+    }
+
+    // ---------------------------------------------------------
+    // STRATEGY 2: HANDLE PDF TOOLS (USING ILOVEPDF + TEMP FILES)
+    // ---------------------------------------------------------
     const publicKey = process.env.ILOVEPDF_PUBLIC_KEY;
     const secretKey = process.env.ILOVEPDF_SECRET_KEY;
 
@@ -17,88 +94,50 @@ export async function POST(req) {
     }
 
     const instance = new ILovePDFApi(publicKey, secretKey);
-
-    const formData = await req.formData();
-    const taskType = formData.get('task');
-    const password = formData.get('password');
-    const watermarkText = formData.get('watermark_text');
-    const splitRanges = formData.get('split_ranges');
-    const compressionLevel = formData.get('compression_level'); // NEW: Get Level
-    const files = formData.getAll('files'); 
-
-    if (!files || files.length === 0 || !taskType) {
-      return NextResponse.json({ error: 'Missing file or task' }, { status: 400 });
-    }
-
-    // Map Tool Name
     let apiToolName = taskType.split('_')[0]; 
-    if (taskType.includes('image') && apiToolName === 'compress') apiToolName = 'compressimage';
-    if (taskType.includes('image') && apiToolName === 'resize') apiToolName = 'resizeimage';
     if (taskType === 'pdf_to_jpg') apiToolName = 'pdfjpg';
     if (taskType === 'word_to_pdf') apiToolName = 'officepdf';
-    
-    // Start Task
+
     const task = instance.newTask(apiToolName);
     await task.start();
 
-    // PROCESS FILES
-    for (const file of files) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
+    // Loop through files and SAVE THEM TO DISK FIRST (Fixes path.substring error)
+    for (const f of files) {
+      const b = Buffer.from(await f.arrayBuffer());
       const tempDir = os.tmpdir();
-      const safeName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${file.name.replace(/\s/g, '_')}`;
-      const tempFilePath = path.join(tempDir, safeName);
+      // Create a unique name to avoid conflicts
+      const safeName = `${Date.now()}_${Math.random().toString(36).substring(7)}_${f.name.replace(/\s/g, '_')}`;
+      tempFilePath = path.join(tempDir, safeName);
       
-      fs.writeFileSync(tempFilePath, buffer);
-      tempFiles.push(tempFilePath); 
-
-      // Add to Task
-      const iLoveFile = new ILovePDFFile(tempFilePath);
+      fs.writeFileSync(tempFilePath, b); // Write to disk
+      
+      const iLoveFile = new ILovePDFFile(tempFilePath); // Pass PATH, not buffer
       await task.addFile(iLoveFile);
     }
 
-    // PROCESS PARAMETERS
+    // PDF Params
     const processParams = {};
-    
-    // 1. Protect Logic
-    if (apiToolName === 'protect') {
-        if (!password) throw new Error("Password is required");
-        processParams.password = password;
+    if (apiToolName === 'protect' && password) processParams.password = password;
+    if (apiToolName === 'watermark' && watermarkText) {
+         processParams.mode = 'text';
+         processParams.text = watermarkText;
     }
-    
-    // 2. Watermark Logic
-    if (apiToolName === 'watermark') {
-        if (!watermarkText) throw new Error("Watermark text is required");
-        processParams.mode = 'text';
-        processParams.text = watermarkText;
-    }
-
-    // 3. Split Logic
-    if (apiToolName === 'split') {
-        if (!splitRanges) throw new Error("Split ranges required");
+    if (apiToolName === 'split' && splitRanges) {
         processParams.split_mode = 'ranges';
         processParams.ranges = splitRanges;
     }
-
-    // 4. Compress Logic (NEW)
     if (apiToolName === 'compress') {
-        // Defaults to 'recommended' if not provided
-        processParams.compression_level = compressionLevel || 'recommended'; 
+        processParams.compression_level = compressionLevel || 'recommended';
     }
 
-    // Execute Process
     await task.process(processParams);
-
     const downloadData = await task.download();
 
-    // Determine content type based on output
-    const isZipOutput = (apiToolName === 'split' || apiToolName === 'pdfjpg');
-    
     return new NextResponse(downloadData, {
       status: 200,
       headers: {
-        'Content-Type': isZipOutput ? 'application/zip' : 'application/pdf',
-        'Content-Disposition': `attachment; filename="processed_result.${isZipOutput ? 'zip' : 'pdf'}"`,
+        'Content-Type': apiToolName === 'pdfjpg' ? 'application/zip' : 'application/pdf',
+        'Content-Disposition': `attachment; filename="processed_result.${apiToolName === 'pdfjpg' ? 'zip' : 'pdf'}"`,
       },
     });
 
@@ -106,9 +145,9 @@ export async function POST(req) {
     console.error('API ERROR:', error);
     return NextResponse.json({ error: error.message || 'Processing failed.' }, { status: 500 });
   } finally {
-    // Cleanup
-    tempFiles.forEach(path => {
-      if (fs.existsSync(path)) fs.unlinkSync(path);
-    });
+    // Cleanup temp files
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      try { fs.unlinkSync(tempFilePath); } catch(e) {}
+    }
   }
 }
