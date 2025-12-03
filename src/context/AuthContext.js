@@ -1,47 +1,44 @@
 'use client';
-import { createContext, useContext, useEffect, useState } from 'react';
-import { auth, db } from '../lib/firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { useContext, createContext, useState, useEffect } from "react";
+import { 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  GoogleAuthProvider 
+} from "firebase/auth";
+import { auth } from "../lib/firebase";
 
-const AuthContext = createContext({});
-
-export const useAuth = () => useContext(AuthContext);
+const AuthContext = createContext();
 
 export const AuthContextProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const googleSignIn = async () => {
+  // 1. Google Sign In Function
+  const googleSignIn = () => {
     const provider = new GoogleAuthProvider();
-    try {
-      const result = await signInWithPopup(auth, provider);
-      // Save user to Firestore immediately after login
-      await setDoc(doc(db, "users", result.user.uid), {
-        email: result.user.email,
-        name: result.user.displayName,
-        lastLogin: new Date(),
-      }, { merge: true });
-    } catch (error) {
-      console.error("Login failed", error);
-    }
+    signInWithPopup(auth, provider);
   };
 
+  // 2. Log Out Function
   const logOut = () => {
     signOut(auth);
   };
 
+  // 3. Monitor Auth State (Checks if user is logged in)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, googleSignIn, logOut }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  return useContext(AuthContext);
 };

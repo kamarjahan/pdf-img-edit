@@ -1,108 +1,78 @@
 'use client';
-import { useState } from 'react'; // Import state
 import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
-import { Menu, X, LogOut, User } from 'lucide-react'; // Icons
+import { useState } from 'react';
 
 export default function Navbar() {
   const { user, googleSignIn, logOut } = useAuth();
-  const [isOpen, setIsOpen] = useState(false); // State for mobile menu
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    try {
+      setLoading(true);
+      await googleSignIn();
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <nav className="fixed top-0 w-full z-50 border-b border-white/10 glass-card">
+    <nav className="fixed top-0 w-full z-50 border-b border-white/10 glass-card bg-slate-900/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
           {/* Logo */}
           <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold bg-gradient-to-r from-brand-500 to-blue-500 bg-clip-text text-transparent">
+            <Link href="/" className="text-xl font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
               ProTool
             </Link>
           </div>
 
-          {/* Desktop Menu (Hidden on Mobile) */}
+          {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
             <Link href="/pdf" className="text-gray-300 hover:text-white text-sm font-medium transition-colors">PDF Tools</Link>
             <Link href="/image" className="text-gray-300 hover:text-white text-sm font-medium transition-colors">Image Tools</Link>
             
-            {user ? (
-              <div className="flex items-center gap-4 border-l border-white/10 pl-4">
-                <img 
-                  src={user.photoURL} 
-                  alt="Profile" 
-                  className="w-8 h-8 rounded-full border-2 border-brand-500"
-                />
-                <button onClick={logOut} title="Sign Out">
-                  <LogOut className="w-5 h-5 text-gray-400 hover:text-red-400 transition-colors" />
-                </button>
-              </div>
-            ) : (
-              <button 
-                onClick={googleSignIn}
-                className="bg-brand-600 hover:bg-brand-500 text-white px-5 py-2 rounded-full text-sm font-medium shadow-lg shadow-brand-500/20 transition-all hover:scale-105"
-              >
-                Sign In
-              </button>
-            )}
-          </div>
-
-          {/* Mobile Menu Button (Visible ONLY on Mobile) */}
-          <div className="md:hidden flex items-center">
-            <button 
-              onClick={() => setIsOpen(!isOpen)} 
-              className="text-gray-300 hover:text-white p-2"
-            >
-              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Dropdown Menu */}
-      {isOpen && (
-        <div className="md:hidden bg-[#0f172a] border-b border-white/10 animate-fade-in-up">
-          <div className="px-4 pt-2 pb-6 space-y-2">
-            <Link 
-              href="/pdf" 
-              onClick={() => setIsOpen(false)}
-              className="block px-3 py-3 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/5"
-            >
-              PDF Tools
-            </Link>
-            <Link 
-              href="/image" 
-              onClick={() => setIsOpen(false)}
-              className="block px-3 py-3 rounded-md text-base font-medium text-gray-300 hover:text-white hover:bg-white/5"
-            >
-              Image Tools
-            </Link>
-            
-            <div className="border-t border-white/10 my-2 pt-2">
+            {/* AUTH SECTION */}
+            <div className="border-l border-white/10 pl-6 ml-2">
               {user ? (
-                <div className="flex items-center justify-between px-3 py-3">
-                  <div className="flex items-center gap-3">
-                    <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" />
-                    <span className="text-sm font-medium text-white">{user.displayName}</span>
+                <div className="flex items-center gap-3 animate-fade-in-up">
+                  {/* User Info (Hidden on very small screens) */}
+                  <div className="hidden sm:block text-right">
+                    <p className="text-sm font-medium text-white">{user.displayName}</p>
+                    <p className="text-xs text-gray-400">Basic Plan</p>
                   </div>
+
+                  {/* Profile Picture */}
+                  <img 
+                    src={user.photoURL} 
+                    alt="Profile" 
+                    className="w-9 h-9 rounded-full border-2 border-brand-500 shadow-sm"
+                  />
+                  
+                  {/* Sign Out Button */}
                   <button 
-                    onClick={() => { logOut(); setIsOpen(false); }}
-                    className="text-red-400 hover:text-red-300 text-sm font-medium"
+                    onClick={logOut} 
+                    className="text-xs bg-white/10 hover:bg-red-500/20 text-gray-300 hover:text-red-400 px-3 py-1.5 rounded-md transition-all ml-2"
                   >
                     Sign Out
                   </button>
                 </div>
               ) : (
                 <button 
-                  onClick={() => { googleSignIn(); setIsOpen(false); }}
-                  className="w-full text-center bg-brand-600 text-white px-3 py-3 rounded-md text-base font-medium mt-2"
+                  onClick={handleSignIn}
+                  disabled={loading}
+                  className="bg-white text-black hover:bg-gray-200 px-5 py-2 rounded-full text-sm font-bold shadow-lg shadow-white/10 transition-all flex items-center gap-2"
                 >
-                  Sign In with Google
+                  {loading ? 'Signing in...' : 'Sign in with Google'}
                 </button>
               )}
             </div>
           </div>
         </div>
-      )}
+      </div>
     </nav>
   );
 }
