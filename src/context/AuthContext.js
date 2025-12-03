@@ -1,7 +1,8 @@
 'use client';
 import { useContext, createContext, useState, useEffect } from "react";
+// 1. Import signInWithRedirect instead of signInWithPopup
 import { 
-  signInWithPopup, 
+  signInWithRedirect, // <--- CHANGE THIS
   signOut, 
   onAuthStateChanged, 
   GoogleAuthProvider 
@@ -13,18 +14,16 @@ const AuthContext = createContext();
 export const AuthContextProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
-  // 1. Google Sign In Function
   const googleSignIn = () => {
     const provider = new GoogleAuthProvider();
-    signInWithPopup(auth, provider);
+    // 2. Use Redirect Method
+    signInWithRedirect(auth, provider); 
   };
 
-  // 2. Log Out Function
   const logOut = () => {
     signOut(auth);
   };
 
-  // 3. Monitor Auth State (Checks if user is logged in)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);

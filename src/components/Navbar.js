@@ -8,11 +8,14 @@ export default function Navbar() {
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
+    // 1. ADD THIS LINE
+    console.log("🟢 BUTTON CLICKED! Starting sign in..."); 
+    
     try {
       setLoading(true);
       await googleSignIn();
     } catch (error) {
-      console.log(error);
+      console.error("🔴 SIGN IN ERROR:", error);
     } finally {
       setLoading(false);
     }
@@ -62,12 +65,13 @@ export default function Navbar() {
                 </div>
               ) : (
                 <button 
-                  onClick={handleSignIn}
-                  disabled={loading}
-                  className="bg-white text-black hover:bg-gray-200 px-5 py-2 rounded-full text-sm font-bold shadow-lg shadow-white/10 transition-all flex items-center gap-2"
-                >
-                  {loading ? 'Signing in...' : 'Sign in with Google'}
-                </button>
+  onClick={handleSignIn}
+  disabled={loading}
+  // Added 'relative' and 'z-50' to force it to be clickable
+  className="relative z-50 bg-white text-black hover:bg-gray-200 px-5 py-2 rounded-full text-sm font-bold shadow-lg shadow-white/10 transition-all flex items-center gap-2"
+>
+  {loading ? 'Signing in...' : 'Sign in with Google'}
+</button>
               )}
             </div>
           </div>
