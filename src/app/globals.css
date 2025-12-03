@@ -3,43 +3,41 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 15, 23, 42;
-}
-
-html {
-  scroll-behavior: smooth;
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 15, 23, 42; /* Dark Slate */
+  --background-end-rgb: 0, 0, 0;
 }
 
 body {
-  font-family: sans-serif;
-  background: #F8FAFC;
-  color: #0F172A;
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
 }
 
+/* Smooth Glass Card Effect */
+.glass-card {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #0f172a;
 }
 ::-webkit-scrollbar-thumb {
-  background: #64748B;
+  background: #334155;
   border-radius: 4px;
-}
-
-/* Market Ticker Animation */
-@keyframes scroll {
-  0% { transform: translateX(100%); }
-  100% { transform: translateX(-100%); }
-}
-
-.animate-ticker {
-  animation: scroll 25s linear infinite;
-  white-space: nowrap;
-  display: inline-block;
-}
-
-/* Pause on hover so people can read it */
-.animate-ticker:hover {
-  animation-play-state: paused;
 }
