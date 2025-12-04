@@ -1,6 +1,6 @@
 'use client';
-import { use } from 'react'; // FIXED: Required for Next.js 15
-import { tools } from '../../lib/toolsData'; // FIXED: Relative path to avoid errors
+import { use } from 'react'; // 1. Import 'use'
+import { tools } from '../../lib/toolsData'; 
 import Link from 'next/link';
 import { FileText, Image, Minimize2, Maximize, Crop, RefreshCw, Lock, Unlock, Stamp, RotateCw, Split, Merge } from 'lucide-react';
 
@@ -9,7 +9,8 @@ const iconMap = {
 };
 
 export default function ToolDashboard({ params }) {
-  // FIXED: Unwrap params using the 'use' hook
+  // 2. Unwrap params using React.use()
+  // This fixes the "Promise" error you are seeing
   const { type } = use(params); 
 
   const currentTools = tools[type] || [];
